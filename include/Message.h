@@ -1,6 +1,5 @@
 /*
-	By Jenocn
-	https://jenocn.github.io/
+    https://github.com/xmfrostless/Message
 */
 
 #pragma once
@@ -9,9 +8,8 @@
 #include <functional>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 #include <memory>
-#include <tuple>
-#include <deque>
 
 // debug config
 #ifndef NDEBUG
@@ -19,12 +17,24 @@
 #include <iostream>
 
 #define MESSAGE_ASSERT(__INFO__, __CALL__, __MSG__) do {\
-	std::cerr << "Message Error: " << __INFO__ << " / " << __CALL__ << " / " << __MSG__ << std::endl;\
-	assert(false);\
+    std::cerr << "[Message Error]: " << __INFO__ << " / " << __CALL__ << " / " << __MSG__ << std::endl;\
+    assert(false);\
+} while(false)
+
+#define MESSAGE_INVOKE_ASSERT(__STACK__, __CUR__) do {\
+    if (__STACK__.size() > 200u) {\
+        std::cerr << "[Message Error]: " << "Invoke stack:" << std::endl;\
+        for (auto& item : __STACK__) {\
+            std::cerr << item.name() << " -> ";\
+        }\
+        std::cerr << "(*)" << __CUR__.name() << std::endl;\
+        MESSAGE_ASSERT("The number of message recursion exceeds the upper limit", "Send", "");\
+    }\
 } while(false)
 
 #else
 #define MESSAGE_ASSERT(__INFO__, __CALL__, __MSG__) (void(0))
+#define MESSAGE_INVOKE_ASSERT(__STACK__) (void(0))
 #endif
 
 #pragma warning(push)
@@ -34,132 +44,123 @@ namespace Message {
 
 class Dispatcher {
 private:
-	template <typename T>
-	struct Type final {
-		static const std::type_index TYPE;
-		static const std::size_t TYPE_CODE;
-	};
+    template <typename T>
+    struct Type final {
+        static const std::type_index TYPE;
+        static const std::size_t TYPE_CODE;
+    };
 
-	struct IListener {
-		virtual ~IListener() = default;
-		virtual const std::type_index& GetType() const = 0;
-	};
+    struct ListenerBase {
+        virtual ~ListenerBase() = default;
+        virtual const std::type_index& GetType() const = 0;
+        std::intptr_t binder_key { 0 };
+    };
 
-	template<typename _Ty>
-	struct Listener final: public IListener {
-	public:
-		Listener(std::function<void(const _Ty&)> func): call(func) {}
-
-		virtual const std::type_index& GetType() const override { return Type<_Ty>::TYPE; }
-
-		std::function<void(const _Ty&)> call;
-	};
+    template<typename _Ty>
+    struct Listener final: public ListenerBase {
+        Listener(std::intptr_t key, std::function<void(const _Ty&)> func) : call(func) {
+            binder_key = key;
+        }
+        virtual const std::type_index& GetType() const override { return Type<_Ty>::TYPE; }
+        std::function<void(const _Ty&)> call;
+    };
 
 public:
-	//
-	template<typename _Ty>
-	void AddListener(const void* sender, std::function<void(const _Ty&)> func) {
-		if (!sender) {
-			MESSAGE_ASSERT("Sender is null!", "AddListener", typeid(_Ty).name());
-			return;
-		}
-		if (!func) {
-			MESSAGE_ASSERT("Func is null!", "AddListener", typeid(_Ty).name());
-			return;
-		}
-		auto message_code { Type<_Ty>::TYPE_CODE };
-		auto sender_key { reinterpret_cast<std::intptr_t>(sender) };
-		if (!_message_invoke_pool.empty()) {
-			_listener_cache_queue.emplace_back(std::make_tuple(message_code, sender_key, std::make_unique<Listener<_Ty>>(func)));
-			return;
-		}
+    //
+    template<typename _Ty>
+    void AddListener(const void* binder, std::function<void(const _Ty&)> func) {
+        if (!binder) {
+            MESSAGE_ASSERT("The binder is null!", "AddListener", Type<_Ty>::TYPE.name());
+            return;
+        }
+        if (!func) {
+            MESSAGE_ASSERT("Func is null!", "AddListener", Type<_Ty>::TYPE.name());
+            return;
+        }
+        auto message_code { Type<_Ty>::TYPE_CODE };
+        auto binder_key { reinterpret_cast<std::intptr_t>(binder) };
+        auto& vec { _listener_map[message_code] };
+        for (auto i = 0u; i < vec.size(); ++i) {
+            if (vec[i]->binder_key == binder_key) {
+                if (_remove_indexes.find(i) == _remove_indexes.end()) {
+                    MESSAGE_ASSERT("The binder is exist!", "AddListener", Type<_Ty>::TYPE.name());
+                    return;
+                }
+            }
+        }
+        vec.emplace_back(std::make_unique<Listener<_Ty>>(binder_key, func));
+    }
 
-		auto& lis_map { _listener_map[message_code] };
-		if (lis_map.find(sender_key) != lis_map.end()) {
-			MESSAGE_ASSERT("Sender is exist!", "AddListener", typeid(_Ty).name());
-			return;
-		}
-		lis_map.emplace(sender_key, std::make_unique<Listener<_Ty>>(func));
-	}
+    //
+    template<typename _Ty>
+    void RemoveListener(const void* binder) {
+        if (!binder) {
+            MESSAGE_ASSERT("The binder is null!", "RemoveListener", Type<_Ty>::TYPE.name());
+            return;
+        }
+        auto message_code { Type<_Ty>::TYPE_CODE };
+        auto binder_key { reinterpret_cast<std::intptr_t>(binder) };
+        auto& vec { _listener_map[message_code] };
+        for (auto i = 0u; i < vec.size(); ++i) {
+            if (vec[i]->binder_key == binder_key) {
+                if (_remove_indexes.find(i) == _remove_indexes.end()) {
+                    _remove_indexes.emplace(i);
+                    return;
+                }
+            }
+        }
+    }
 
-	//
-	template<typename _Ty>
-	void RemoveListener(const void* sender) {
-		if (!sender) {
-			MESSAGE_ASSERT("Sender is null!", "AddListener", typeid(_Ty).name());
-			return;
-		}
-		auto message_code { Type<_Ty>::TYPE_CODE };
-		auto sender_key { reinterpret_cast<std::intptr_t>(sender) };
+    //
+    template <typename _Ty>
+    void Send(const _Ty& message) {
+        std::size_t message_code { Type<_Ty>::TYPE_CODE };
+        auto& vec { _listener_map[message_code] };
+        if (vec.empty()) {
+            return;
+        }
 
-		if (!_message_invoke_pool.empty()) {
-			_listener_cache_queue.emplace_back(std::make_tuple(message_code, sender_key, nullptr));
-			return;
-		}
+        MESSAGE_INVOKE_ASSERT(_invoke_stack, Type<_Ty>::TYPE);
+        _invoke_stack.push_back(Type<_Ty>::TYPE);
+        auto tail { vec.size() - 1 };
+        const auto size = vec.size();
+        for (auto i = 0u; i < size; ++i) {
+            auto& listener = vec[i];
+            if (_remove_indexes.find(i) != _remove_indexes.end()) {
+                continue;
+            }
+            static_cast<Listener<_Ty>*>(listener.get())->call(message);
+        }
+        _invoke_stack.pop_back();
 
-		_listener_map[message_code].erase(sender_key);
-	}
+        if (_invoke_stack.empty()) {
+            if (!_remove_indexes.empty()) {
+                auto tail = vec.size();
+                for (auto index : _remove_indexes) {
+                    std::swap(vec[index], vec[--tail]);
+                }
+                vec.resize(tail);
+                _remove_indexes.clear();
+            }
+        }
+    }
 
-	//
-	template <typename _Ty>
-	void Send(const _Ty& message) {
-		std::size_t message_code { Type<_Ty>::TYPE_CODE };
-		auto listener_ite { _listener_map.find(message_code) };
-		if (listener_ite == _listener_map.end() || listener_ite->second.empty()) {
-			return;
-		}
-
-		if (_message_invoke_pool.find(message_code) != _message_invoke_pool.end()) {
-			MESSAGE_ASSERT("Type is recursive send!", "Send", Type<_Ty>::TYPE.name());
-			return;
-		}
-
-		_message_invoke_pool.emplace(message_code);
-		for (auto& pair : listener_ite->second) {
-			static_cast<Listener<_Ty>*>(pair.second.get())->call(message);
-		}
-		_message_invoke_pool.erase(message_code);
-
-		if (!_message_invoke_pool.empty() || _listener_cache_queue.empty()) {
-			return;
-		}
-
-		for (auto& [item_msg_code, item_sender_key, item_listener] : _listener_cache_queue) {
-			if (item_listener) {
-				auto& tmp_map { _listener_map[item_msg_code] };
-				if (tmp_map.count(item_sender_key)) {
-					MESSAGE_ASSERT("Sender is exist!", "AddListener", item_listener->GetType().name());
-					return;
-				}
-				tmp_map.emplace(item_sender_key, std::move(item_listener));
-			} else {
-				_listener_map[item_msg_code].erase(item_sender_key);
-			}
-		}
-		_listener_cache_queue.clear();
-	}
-
-	//
-	void Clear() {
-		if (!_message_invoke_pool.empty()) {
-			MESSAGE_ASSERT("Cannot perform this operation while processing the message.", "Clear", "");
-			return;
-		}
-		_listener_map.clear();
-	}
+    //
+    void Clear() {
+        _listener_map.clear();
+    }
 
 private:
-	std::unordered_map<std::size_t, std::unordered_map<std::intptr_t, std::unique_ptr<IListener>>> _listener_map;
-	std::deque<std::tuple<std::size_t, std::intptr_t, std::unique_ptr<IListener>>> _listener_cache_queue;
-	std::unordered_set<std::size_t> _message_invoke_pool;
+    std::unordered_map<std::size_t, std::vector<std::unique_ptr<ListenerBase>>> _listener_map;
+    std::unordered_set<std::size_t> _remove_indexes;
+    std::vector<std::type_index> _invoke_stack;
 };
 
 template <typename T>
 const std::type_index Dispatcher::Type<T>::TYPE { typeid(T) };
 
 template <typename T>
-const std::size_t Dispatcher::Type<T>::TYPE_CODE { typeid(T).hash_code() };
-
+const std::size_t Dispatcher::Type<T>::TYPE_CODE { Type<T>::TYPE.hash_code() };
 }
 
 #pragma warning(pop)
