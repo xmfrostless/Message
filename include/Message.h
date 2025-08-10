@@ -145,11 +145,6 @@ public:
         }
     }
 
-    //
-    void Clear() {
-        _listener_map.clear();
-    }
-
 private:
     std::unordered_map<std::size_t, std::vector<std::unique_ptr<ListenerBase>>> _listener_map;
     std::unordered_set<std::size_t> _remove_indexes;
