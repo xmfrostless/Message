@@ -16,15 +16,16 @@ struct Custom {
 };
 
 // 添加监听
-dispatcher.AddListener<Custom>(this, [](const int& msg){
+dispatcher.AddListener<Custom>(this, [](auto& msg){
 	// 使用参数
-	std::cout << msg.param << std::endl;
+	std::cout << msg.value << std::endl;
 });
 // 删除监听
 dispatcher.RemoveListener<Custom>(this);
 
 // 发送消息
 Custom custom_msg;
+custom_msg.value = 1000;
 dispatcher.Send(custom_msg);
 ```
 
