@@ -122,11 +122,10 @@ public:
         _invoke_stack.push_back(Type<_Ty>::TYPE);
         const auto size { vec.size() };
         for (auto i { 0u }; i < size; ++i) {
-            auto& listener { vec[i] };
             if (_remove_indexes.find(i) != _remove_indexes.end()) {
                 continue;
             }
-            static_cast<Listener<_Ty>*>(listener.get())->call(message);
+            static_cast<Listener<_Ty>*>(vec[i].get())->call(message);
         }
         _invoke_stack.pop_back();
 
