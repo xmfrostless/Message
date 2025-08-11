@@ -16,8 +16,8 @@
 #include <cassert>
 #include <iostream>
 
-#define MESSAGE_ASSERT(__INFO__, __CALL__, __MSG__) do {\
-    std::cerr << "[Message Error]: " << __INFO__ << " / " << __CALL__ << " / " << __MSG__ << std::endl;\
+#define MESSAGE_ASSERT(__INFO__, __MSG__) do {\
+    std::cerr << "[Message Error]: " << __FUNCTION__ << " / " << __INFO__ << " / " << __MSG__ << std::endl;\
     assert(false);\
 } while(false)
 
@@ -28,12 +28,12 @@
             std::cerr << item.name() << " -> ";\
         }\
         std::cerr << "(*)" << __CUR__.name() << std::endl;\
-        MESSAGE_ASSERT("The number of message recursion exceeds the upper limit", "Send", "");\
+        MESSAGE_ASSERT("The number of message recursion exceeds the upper limit", "");\
     }\
 } while(false)
 
 #else
-#define MESSAGE_ASSERT(__INFO__, __CALL__, __MSG__) (void(0))
+#define MESSAGE_ASSERT(__INFO__, __MSG__) (void(0))
 #define MESSAGE_INVOKE_ASSERT(__STACK__) (void(0))
 #endif
 
@@ -52,16 +52,14 @@ private:
 
     struct ListenerBase {
         virtual ~ListenerBase() = default;
-        virtual const std::type_index& GetType() const = 0;
         std::intptr_t binder_key { 0 };
     };
 
     template<typename _Ty>
     struct Listener final: public ListenerBase {
-        Listener(std::intptr_t key, std::function<void(const _Ty&)> func) : call(func) {
+        Listener(std::intptr_t key, std::function<void(const _Ty&)> func): call(func) {
             binder_key = key;
         }
-        virtual const std::type_index& GetType() const override { return Type<_Ty>::TYPE; }
         std::function<void(const _Ty&)> call;
     };
 
@@ -70,20 +68,20 @@ public:
     template<typename _Ty>
     void AddListener(const void* binder, std::function<void(const _Ty&)> func) {
         if (!binder) {
-            MESSAGE_ASSERT("The binder is null!", "AddListener", Type<_Ty>::TYPE.name());
+            MESSAGE_ASSERT("The binder is null!", Type<_Ty>::TYPE.name());
             return;
         }
         if (!func) {
-            MESSAGE_ASSERT("Func is null!", "AddListener", Type<_Ty>::TYPE.name());
+            MESSAGE_ASSERT("Func is null!", Type<_Ty>::TYPE.name());
             return;
         }
         auto message_code { Type<_Ty>::TYPE_CODE };
         auto binder_key { reinterpret_cast<std::intptr_t>(binder) };
         auto& vec { _listener_map[message_code] };
-        for (auto i = 0u; i < vec.size(); ++i) {
+        for (auto i { 0u }; i < vec.size(); ++i) {
             if (vec[i]->binder_key == binder_key) {
                 if (_remove_indexes.find(i) == _remove_indexes.end()) {
-                    MESSAGE_ASSERT("The binder is exist!", "AddListener", Type<_Ty>::TYPE.name());
+                    MESSAGE_ASSERT("The binder is exist!", Type<_Ty>::TYPE.name());
                     return;
                 }
             }
@@ -95,13 +93,13 @@ public:
     template<typename _Ty>
     void RemoveListener(const void* binder) {
         if (!binder) {
-            MESSAGE_ASSERT("The binder is null!", "RemoveListener", Type<_Ty>::TYPE.name());
+            MESSAGE_ASSERT("The binder is null!", Type<_Ty>::TYPE.name());
             return;
         }
         auto message_code { Type<_Ty>::TYPE_CODE };
         auto binder_key { reinterpret_cast<std::intptr_t>(binder) };
         auto& vec { _listener_map[message_code] };
-        for (auto i = 0u; i < vec.size(); ++i) {
+        for (auto i { 0u }; i < vec.size(); ++i) {
             if (vec[i]->binder_key == binder_key) {
                 if (_remove_indexes.find(i) == _remove_indexes.end()) {
                     _remove_indexes.emplace(i);
@@ -122,10 +120,9 @@ public:
 
         MESSAGE_INVOKE_ASSERT(_invoke_stack, Type<_Ty>::TYPE);
         _invoke_stack.push_back(Type<_Ty>::TYPE);
-        auto tail { vec.size() - 1 };
-        const auto size = vec.size();
-        for (auto i = 0u; i < size; ++i) {
-            auto& listener = vec[i];
+        const auto size { vec.size() };
+        for (auto i { 0u }; i < size; ++i) {
+            auto& listener { vec[i] };
             if (_remove_indexes.find(i) != _remove_indexes.end()) {
                 continue;
             }
@@ -135,7 +132,7 @@ public:
 
         if (_invoke_stack.empty()) {
             if (!_remove_indexes.empty()) {
-                auto tail = vec.size();
+                auto tail { vec.size() };
                 for (auto index : _remove_indexes) {
                     std::swap(vec[index], vec[--tail]);
                 }
