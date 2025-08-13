@@ -21,7 +21,8 @@
     assert(false);\
 } while(false)
 
-#define MESSAGE_INVOKE_ASSERT(__STACK__, __CUR__) do {\
+#define MESSAGE_INVOKE_PUSH(__STACK__, __CUR__) do {\
+    __STACK__.push_back(__CUR__);\
     if (__STACK__.size() > 200u) {\
         std::cerr << "[Message Error]: " << "Invoke stack:" << std::endl;\
         for (auto& item : __STACK__) {\
@@ -32,9 +33,14 @@
     }\
 } while(false)
 
+#define MESSAGE_INVOKE_POP(__STACK__) do {\
+    __STACK__.pop_back();\
+} while(false)
+
 #else
 #define MESSAGE_ASSERT(__INFO__, __MSG__) (void(0))
-#define MESSAGE_INVOKE_ASSERT(__STACK__) (void(0))
+#define MESSAGE_INVOKE_PUSH(__STACK__, __CUR__) (void(0))
+#define MESSAGE_INVOKE_POP(__STACK__) (void(0))
 #endif
 
 #pragma warning(push)
@@ -57,7 +63,7 @@ private:
 
     template<typename _Ty>
     struct Listener final: public ListenerBase {
-        Listener(std::intptr_t key, std::function<void(const _Ty&)> func): call(func) {
+        Listener(std::intptr_t key, std::function<void(const _Ty&)> func) : call(func) {
             binder_key = key;
         }
         std::function<void(const _Ty&)> call;
@@ -120,8 +126,8 @@ public:
             return;
         }
 
-        MESSAGE_INVOKE_ASSERT(_invoke_stack, Type<_Ty>::TYPE);
-        _invoke_stack.push_back(Type<_Ty>::TYPE);
+        MESSAGE_INVOKE_PUSH(_invoke_stack, Type<_Ty>::TYPE);
+        ++_invoke_level;
         const auto size { listeners.size() };
         auto& remove_indexes { _remove_indexes[message_code] };
         for (auto i { 0u }; i < size; ++i) {
@@ -130,11 +136,18 @@ public:
             }
             static_cast<Listener<_Ty>*>(listeners[i].get())->call(message);
         }
-        _invoke_stack.pop_back();
+        --_invoke_level;
+        MESSAGE_INVOKE_POP(_invoke_stack);
 
-        if (_invoke_stack.empty() && !_remove_indexes.empty()) {
+        if (_invoke_level == 0 && !_remove_indexes.empty()) {
             for (auto& item : _remove_indexes) {
+                if (item.second.empty()) {
+                    continue;
+                }
                 auto& vec { _listener_map[item.first] };
+                if (vec.empty()) {
+                    continue;
+                }
                 auto tail { vec.size() };
                 for (auto index : item.second) {
                     std::swap(vec[index], vec[--tail]);
@@ -148,7 +161,10 @@ public:
 private:
     std::unordered_map<std::size_t, std::vector<std::unique_ptr<ListenerBase>>> _listener_map;
     std::unordered_map<std::size_t, std::unordered_set<std::size_t>> _remove_indexes;
+#ifndef NDEBUG
     std::vector<std::type_index> _invoke_stack;
+#endif
+    int _invoke_level { 0 };
 };
 
 template <typename T>
