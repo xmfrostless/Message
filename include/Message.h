@@ -78,9 +78,10 @@ public:
         auto message_code { Type<_Ty>::TYPE_CODE };
         auto binder_key { reinterpret_cast<std::intptr_t>(binder) };
         auto& vec { _listener_map[message_code] };
+        auto& remove_indexes { _remove_indexes[message_code] };
         for (auto i { 0u }; i < vec.size(); ++i) {
             if (vec[i]->binder_key == binder_key) {
-                if (_remove_indexes.find(i) == _remove_indexes.end()) {
+                if (remove_indexes.find(i) == remove_indexes.end()) {
                     MESSAGE_ASSERT("The binder is exist!", Type<_Ty>::TYPE.name());
                     return;
                 }
@@ -99,10 +100,11 @@ public:
         auto message_code { Type<_Ty>::TYPE_CODE };
         auto binder_key { reinterpret_cast<std::intptr_t>(binder) };
         auto& vec { _listener_map[message_code] };
+        auto& remove_indexes { _remove_indexes[message_code] };
         for (auto i { 0u }; i < vec.size(); ++i) {
             if (vec[i]->binder_key == binder_key) {
-                if (_remove_indexes.find(i) == _remove_indexes.end()) {
-                    _remove_indexes.emplace(i);
+                if (remove_indexes.find(i) == remove_indexes.end()) {
+                    remove_indexes.emplace(i);
                     return;
                 }
             }
@@ -113,37 +115,39 @@ public:
     template <typename _Ty>
     void Send(const _Ty& message) {
         std::size_t message_code { Type<_Ty>::TYPE_CODE };
-        auto& vec { _listener_map[message_code] };
-        if (vec.empty()) {
+        auto& listeners { _listener_map[message_code] };
+        if (listeners.empty()) {
             return;
         }
 
         MESSAGE_INVOKE_ASSERT(_invoke_stack, Type<_Ty>::TYPE);
         _invoke_stack.push_back(Type<_Ty>::TYPE);
-        const auto size { vec.size() };
+        const auto size { listeners.size() };
+        auto& remove_indexes { _remove_indexes[message_code] };
         for (auto i { 0u }; i < size; ++i) {
-            if (_remove_indexes.find(i) != _remove_indexes.end()) {
+            if (remove_indexes.find(i) != remove_indexes.end()) {
                 continue;
             }
-            static_cast<Listener<_Ty>*>(vec[i].get())->call(message);
+            static_cast<Listener<_Ty>*>(listeners[i].get())->call(message);
         }
         _invoke_stack.pop_back();
 
-        if (_invoke_stack.empty()) {
-            if (!_remove_indexes.empty()) {
+        if (_invoke_stack.empty() && !_remove_indexes.empty()) {
+            for (auto& item : _remove_indexes) {
+                auto& vec { _listener_map[item.first] };
                 auto tail { vec.size() };
-                for (auto index : _remove_indexes) {
+                for (auto index : item.second) {
                     std::swap(vec[index], vec[--tail]);
                 }
                 vec.resize(tail);
-                _remove_indexes.clear();
             }
+            _remove_indexes.clear();
         }
     }
 
 private:
     std::unordered_map<std::size_t, std::vector<std::unique_ptr<ListenerBase>>> _listener_map;
-    std::unordered_set<std::size_t> _remove_indexes;
+    std::unordered_map<std::size_t, std::unordered_set<std::size_t>> _remove_indexes;
     std::vector<std::type_index> _invoke_stack;
 };
 
