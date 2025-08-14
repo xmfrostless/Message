@@ -63,7 +63,7 @@ private:
 
     template<typename _Ty>
     struct Listener final: public ListenerBase {
-        Listener(std::intptr_t key, std::function<void(const _Ty&)> func) : call(func) {
+        Listener(std::intptr_t key, std::function<void(const _Ty&)> func): call(func) {
             binder_key = key;
         }
         std::function<void(const _Ty&)> call;
@@ -84,10 +84,11 @@ public:
         auto message_code { Type<_Ty>::TYPE_CODE };
         auto binder_key { reinterpret_cast<std::intptr_t>(binder) };
         auto& vec { _listener_map[message_code] };
-        auto& remove_indexes { _remove_indexes[message_code] };
+        auto removeIndexesIte = _remove_indexes.find(message_code);
         for (auto i { 0u }; i < vec.size(); ++i) {
             if (vec[i]->binder_key == binder_key) {
-                if (remove_indexes.find(i) == remove_indexes.end()) {
+                if (removeIndexesIte == _remove_indexes.end() ||
+                    removeIndexesIte->second.find(i) == removeIndexesIte->second.end()) {
                     MESSAGE_ASSERT("The binder is exist!", Type<_Ty>::TYPE.name());
                     return;
                 }
