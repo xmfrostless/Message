@@ -10,6 +10,7 @@
 #include <unordered_set>
 #include <vector>
 #include <memory>
+#include <cstdint>
 
 // debug config
 #ifndef NDEBUG
