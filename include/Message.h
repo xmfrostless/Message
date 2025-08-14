@@ -113,6 +113,7 @@ public:
             if (vec[i]->binder_key == binder_key) {
                 if (remove_indexes.find(i) == remove_indexes.end()) {
                     remove_indexes.emplace(i);
+                    _should_remove = true;
                     return;
                 }
             }
@@ -141,22 +142,22 @@ public:
         --_invoke_level;
         MESSAGE_INVOKE_POP(_invoke_stack);
 
-        if (_invoke_level == 0 && !_remove_indexes.empty()) {
+        if (_invoke_level == 0 && _should_remove) {
             for (auto& item : _remove_indexes) {
                 if (item.second.empty()) {
                     continue;
                 }
                 auto& vec { _listener_map[item.first] };
-                if (vec.empty()) {
-                    continue;
+                if (!vec.empty()) {
+                    auto tail { vec.size() };
+                    for (auto index : item.second) {
+                        std::swap(vec[index], vec[--tail]);
+                    }
+                    vec.resize(tail);
                 }
-                auto tail { vec.size() };
-                for (auto index : item.second) {
-                    std::swap(vec[index], vec[--tail]);
-                }
-                vec.resize(tail);
+                item.second.clear();
             }
-            _remove_indexes.clear();
+            _should_remove = false;
         }
     }
 
@@ -167,6 +168,7 @@ private:
     std::vector<std::type_index> _invoke_stack;
 #endif
     int _invoke_level { 0 };
+    bool _should_remove { false };
 };
 
 template <typename T>
