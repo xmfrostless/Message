@@ -11,6 +11,7 @@
 #include <vector>
 #include <memory>
 #include <cstdint>
+#include <algorithm>
 
 // debug config
 #ifndef NDEBUG
@@ -108,13 +109,22 @@ public:
         auto message_code { Type<_Ty>::TYPE_CODE };
         auto binder_key { reinterpret_cast<std::intptr_t>(binder) };
         auto& vec { _listener_map[message_code] };
-        auto& remove_indexes { _remove_indexes[message_code] };
-        for (auto i { 0u }; i < vec.size(); ++i) {
-            if (vec[i]->binder_key == binder_key) {
-                if (remove_indexes.find(i) == remove_indexes.end()) {
-                    remove_indexes.emplace(i);
-                    _should_remove = true;
-                    return;
+        if (_invoke_level == 0) {
+            auto it = std::find_if(vec.begin(), vec.end(), [&binder_key](auto& item) {
+                return item->binder_key == binder_key;
+            });
+            if (it != vec.end()) {
+                vec.erase(it);
+            }
+        } else {
+            auto& remove_indexes { _remove_indexes[message_code] };
+            for (auto i { 0u }; i < vec.size(); ++i) {
+                if (vec[i]->binder_key == binder_key) {
+                    if (remove_indexes.find(i) == remove_indexes.end()) {
+                        remove_indexes.emplace(i);
+                        _should_remove = true;
+                        return;
+                    }
                 }
             }
         }
