@@ -107,8 +107,11 @@ public:
             return;
         }
         auto message_code { Type<_Ty>::TYPE_CODE };
-        auto binder_key { reinterpret_cast<std::intptr_t>(binder) };
         auto& vec { _listener_map[message_code] };
+        if (vec.empty()) {
+            return;
+        }
+        auto binder_key { reinterpret_cast<std::intptr_t>(binder) };
         if (_invoke_level == 0) {
             auto it = std::find_if(vec.begin(), vec.end(), [&binder_key](auto& item) {
                 return item->binder_key == binder_key;
