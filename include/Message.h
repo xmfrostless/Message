@@ -18,20 +18,29 @@
 #include <cassert>
 #include <iostream>
 
-#define MESSAGE_ASSERT(__INFO__, __MSG__) do {\
-    std::cerr << "[Message Error]: " << __FUNCTION__ << " / " << __INFO__ << " / " << __MSG__ << std::endl;\
+#define MESSAGE_WARNING(__INFO__, __DETAIL__) do {\
+    std::cerr << "\033[33m" << "[Message] Warn: " << __FUNCTION__ << " / " << __INFO__ << " / " << __DETAIL__ << "\033[0m" << std::endl;\
+} while(false)
+
+#define MESSAGE_ERROR(__INFO__, __DETAIL__) do {\
+    std::cerr << "\033[35m" << "[Message] Error: " <<  __FUNCTION__ << " / " << __INFO__ << " / " << __DETAIL__ << "\033[0m" << std::endl;\
+} while(false)
+
+#define MESSAGE_ASSERT(__INFO__, __DETAIL__) do {\
+    MESSAGE_ERROR(__INFO__, __DETAIL__);\
     assert(false);\
 } while(false)
 
 #define MESSAGE_INVOKE_PUSH(__STACK__, __CUR__) do {\
     __STACK__.push_back(__CUR__);\
     if (__STACK__.size() > 200u) {\
-        std::cerr << "[Message Error]: " << "Invoke stack:" << std::endl;\
+        MESSAGE_ERROR(__CUR__.name(), "The number of message recursion exceeds the upper limit");\
+        std::cerr << "\033[35m" << "Invoke stack:" << std::endl;\
         for (auto& item : __STACK__) {\
-            std::cerr << item.name() << " -> ";\
+            std::cerr << "\033[35m" << item.name() << " -> ";\
         }\
-        std::cerr << "(*)" << __CUR__.name() << std::endl;\
-        MESSAGE_ASSERT("The number of message recursion exceeds the upper limit", "");\
+        std::cerr << "\033[35m" << "(*)" << __CUR__.name() << "\033[0m" << std::endl;\
+        assert(false);\
     }\
 } while(false)
 
@@ -40,7 +49,9 @@
 } while(false)
 
 #else
-#define MESSAGE_ASSERT(__INFO__, __MSG__) (void(0))
+#define MESSAGE_WARNING(__INFO__, __DETAIL__) (void(0))
+#define MESSAGE_ERROR(__INFO__, __DETAIL__) (void(0))
+#define MESSAGE_ASSERT(__INFO__, __DETAIL__) (void(0))
 #define MESSAGE_INVOKE_PUSH(__STACK__, __CUR__) (void(0))
 #define MESSAGE_INVOKE_POP(__STACK__) (void(0))
 #endif
@@ -76,11 +87,11 @@ public:
     template<typename _Ty>
     void AddListener(const void* binder, std::function<void(const _Ty&)> func) {
         if (!binder) {
-            MESSAGE_ASSERT("The binder is null!", Type<_Ty>::TYPE.name());
+            MESSAGE_WARNING(Type<_Ty>::TYPE.name(), "The binder is null!");
             return;
         }
         if (!func) {
-            MESSAGE_ASSERT("Func is null!", Type<_Ty>::TYPE.name());
+            MESSAGE_WARNING(Type<_Ty>::TYPE.name(), "Func is null!");
             return;
         }
         auto message_code { Type<_Ty>::TYPE_CODE };
@@ -91,7 +102,7 @@ public:
             if (vec[i]->binder_key == binder_key) {
                 if (removeIndexesIte == _remove_indexes.end() ||
                     removeIndexesIte->second.find(i) == removeIndexesIte->second.end()) {
-                    MESSAGE_ASSERT("The binder is exist!", Type<_Ty>::TYPE.name());
+                    MESSAGE_WARNING(Type<_Ty>::TYPE.name(), "The binder is exist!");
                     return;
                 }
             }
@@ -103,12 +114,13 @@ public:
     template<typename _Ty>
     void RemoveListener(const void* binder) {
         if (!binder) {
-            MESSAGE_ASSERT("The binder is null!", Type<_Ty>::TYPE.name());
+            MESSAGE_WARNING(Type<_Ty>::TYPE.name(), "The binder is null!");
             return;
         }
         auto message_code { Type<_Ty>::TYPE_CODE };
         auto& vec { _listener_map[message_code] };
         if (vec.empty()) {
+            MESSAGE_WARNING(Type<_Ty>::TYPE.name(), "The listener list is empty!");
             return;
         }
         auto binder_key { reinterpret_cast<std::intptr_t>(binder) };
@@ -118,6 +130,7 @@ public:
             });
             if (it != vec.end()) {
                 vec.erase(it);
+                return;
             }
         } else {
             auto& remove_indexes { _remove_indexes[message_code] };
@@ -131,6 +144,7 @@ public:
                 }
             }
         }
+        MESSAGE_WARNING(Type<_Ty>::TYPE.name(), "The binder not found!");
     }
 
     //
