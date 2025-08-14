@@ -32,7 +32,6 @@
 } while(false)
 
 #define MESSAGE_INVOKE_PUSH(__STACK__, __CUR__) do {\
-    __STACK__.push_back(__CUR__);\
     if (__STACK__.size() > 200u) {\
         MESSAGE_ERROR(__CUR__.name(), "The number of message recursion exceeds the upper limit");\
         std::cerr << "\033[35m" << "Invoke stack:" << std::endl;\
@@ -42,6 +41,7 @@
         std::cerr << "\033[35m" << "(*)" << __CUR__.name() << "\033[0m" << std::endl;\
         assert(false);\
     }\
+    __STACK__.push_back(__CUR__);\
 } while(false)
 
 #define MESSAGE_INVOKE_POP(__STACK__) do {\
