@@ -19,11 +19,11 @@
 #include <iostream>
 
 #define MESSAGE_WARNING(__INFO__, __DETAIL__) do {\
-    std::cerr << "\033[33m" << "[Message] Warn: " << __FUNCTION__ << " / " << __INFO__ << " / " << __DETAIL__ << "\033[0m" << std::endl;\
+    std::cerr << "\n\033[33m" << "[Message] Warn: " << __FUNCTION__ << " / " << __INFO__ << " / " << __DETAIL__ << "\033[0m\n" << std::endl;\
 } while(false)
 
 #define MESSAGE_ERROR(__INFO__, __DETAIL__) do {\
-    std::cerr << "\033[35m" << "[Message] Error: " <<  __FUNCTION__ << " / " << __INFO__ << " / " << __DETAIL__ << "\033[0m" << std::endl;\
+    std::cerr << "\n\033[35m" << "[Message] Error: " <<  __FUNCTION__ << " / " << __INFO__ << " / " << __DETAIL__ << "\033[0m\n" << std::endl;\
 } while(false)
 
 #define MESSAGE_ASSERT(__INFO__, __DETAIL__) do {\
@@ -55,9 +55,6 @@
 #define MESSAGE_INVOKE_PUSH(__STACK__, __CUR__) (void(0))
 #define MESSAGE_INVOKE_POP(__STACK__) (void(0))
 #endif
-
-#pragma warning(push)
-#pragma warning(disable: 4514)
 
 namespace Message {
 
@@ -117,34 +114,26 @@ public:
             MESSAGE_WARNING(Type<_Ty>::TYPE.name(), "The binder is null!");
             return;
         }
-        auto message_code { Type<_Ty>::TYPE_CODE };
-        auto& vec { _listener_map[message_code] };
-        if (vec.empty()) {
-            MESSAGE_WARNING(Type<_Ty>::TYPE.name(), "The listener list is empty!");
+        if (!_RemoveListener(Type<_Ty>::TYPE_CODE, reinterpret_cast<std::intptr_t>(binder))) {
+            MESSAGE_WARNING(Type<_Ty>::TYPE.name(), "The binder not found!");
+            return;
+        }
+    }
+
+    //
+    void RemoveAllListeners(const void* binder) {
+        if (!binder) {
+            MESSAGE_WARNING("The binder is null!", "");
             return;
         }
         auto binder_key { reinterpret_cast<std::intptr_t>(binder) };
-        if (_invoke_level == 0) {
-            auto it = std::find_if(vec.begin(), vec.end(), [&binder_key](auto& item) {
-                return item->binder_key == binder_key;
-            });
-            if (it != vec.end()) {
-                vec.erase(it);
-                return;
-            }
-        } else {
-            auto& remove_indexes { _remove_indexes[message_code] };
-            for (auto i { 0u }; i < vec.size(); ++i) {
-                if (vec[i]->binder_key == binder_key) {
-                    if (remove_indexes.find(i) == remove_indexes.end()) {
-                        remove_indexes.emplace(i);
-                        _should_remove = true;
-                        return;
-                    }
-                }
-            }
+        bool success = false;
+        for (auto& [message_code, vec] : _listener_map) {
+            success |= _RemoveListener(message_code, binder_key);
         }
-        MESSAGE_WARNING(Type<_Ty>::TYPE.name(), "The binder not found!");
+        if (!success) {
+            MESSAGE_WARNING("The binder not found!", "");
+        }
     }
 
     //
@@ -159,9 +148,9 @@ public:
         MESSAGE_INVOKE_PUSH(_invoke_stack, Type<_Ty>::TYPE);
         ++_invoke_level;
         const auto size { listeners.size() };
-        auto& remove_indexes { _remove_indexes[message_code] };
+        auto& indexes { _remove_indexes[message_code] };
         for (auto i { 0u }; i < size; ++i) {
-            if (remove_indexes.find(i) != remove_indexes.end()) {
+            if (indexes.find(i) != indexes.end()) {
                 continue;
             }
             static_cast<Listener<_Ty>*>(listeners[i].get())->call(message);
@@ -188,6 +177,35 @@ public:
         }
     }
 
+    //
+    bool _RemoveListener(std::size_t message_code, std::intptr_t binder_key) {
+        auto& vec { _listener_map[message_code] };
+        if (vec.empty()) {
+            return false;
+        }
+        if (_invoke_level == 0) {
+            auto it = std::remove_if(vec.begin(), vec.end(), [&binder_key](auto& item) {
+                return item->binder_key == binder_key;
+            });
+            if (it != vec.end()) {
+                vec.resize(std::distance(vec.begin(), it));
+                return true;
+            }
+        } else {
+            auto& indexes { _remove_indexes[message_code] };
+            for (auto i { 0u }; i < vec.size(); ++i) {
+                if (vec[i]->binder_key == binder_key) {
+                    if (indexes.find(i) == indexes.end()) {
+                        indexes.emplace(i);
+                        _should_remove = true;
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
 private:
     std::unordered_map<std::size_t, std::vector<std::unique_ptr<ListenerBase>>> _listener_map;
     std::unordered_map<std::size_t, std::unordered_set<std::size_t>> _remove_indexes;
@@ -204,5 +222,3 @@ const std::type_index Dispatcher::Type<T>::TYPE { typeid(T) };
 template <typename T>
 const std::size_t Dispatcher::Type<T>::TYPE_CODE { Type<T>::TYPE.hash_code() };
 }
-
-#pragma warning(pop)
