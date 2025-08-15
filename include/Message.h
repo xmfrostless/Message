@@ -116,7 +116,6 @@ public:
         }
         if (!_RemoveListener(Type<_Ty>::TYPE_CODE, reinterpret_cast<std::intptr_t>(binder))) {
             MESSAGE_WARNING(Type<_Ty>::TYPE.name(), "The binder not found!");
-            return;
         }
     }
 
@@ -128,8 +127,8 @@ public:
         }
         auto binder_key { reinterpret_cast<std::intptr_t>(binder) };
         bool success = false;
-        for (auto& [message_code, vec] : _listener_map) {
-            success |= _RemoveListener(message_code, binder_key);
+        for (auto& item : _listener_map) {
+            success |= _RemoveListener(item.first, binder_key);
         }
         if (!success) {
             MESSAGE_WARNING("The binder not found!", "");
@@ -159,19 +158,19 @@ public:
         MESSAGE_INVOKE_POP(_invoke_stack);
 
         if (_invoke_level == 0 && _should_remove) {
-            for (auto& item : _remove_indexes) {
-                if (item.second.empty()) {
+            for (auto& [rmCode, rmIndexes] : _remove_indexes) {
+                if (rmIndexes.empty()) {
                     continue;
                 }
-                auto& vec { _listener_map[item.first] };
+                auto& vec { _listener_map[rmCode] };
                 if (!vec.empty()) {
                     auto tail { vec.size() };
-                    for (auto index : item.second) {
+                    for (auto index : rmIndexes) {
                         std::swap(vec[index], vec[--tail]);
                     }
                     vec.resize(tail);
                 }
-                item.second.clear();
+                rmIndexes.clear();
             }
             _should_remove = false;
         }
