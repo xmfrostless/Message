@@ -93,18 +93,17 @@ public:
         }
         auto message_code { Type<_Ty>::TYPE_CODE };
         auto binder_key { reinterpret_cast<std::intptr_t>(binder) };
-        auto& vec { _listener_map[message_code] };
-        auto removeIndexesIte = _remove_indexes.find(message_code);
-        for (auto i { 0u }; i < vec.size(); ++i) {
-            if (vec[i]->binder_key == binder_key) {
-                if (removeIndexesIte == _remove_indexes.end() ||
-                    removeIndexesIte->second.find(i) == removeIndexesIte->second.end()) {
+        auto& listeners { _listener_map[message_code] };
+        auto& remove_indexes { _remove_indexes[message_code] };
+        for (auto i { 0u }; i < listeners.size(); ++i) {
+            if (listeners[i]->binder_key == binder_key) {
+                if (remove_indexes.find(i) == remove_indexes.end()) {
                     MESSAGE_WARNING(Type<_Ty>::TYPE.name(), "The binder is exist!");
                     return;
                 }
             }
         }
-        vec.emplace_back(std::make_unique<Listener<_Ty>>(binder_key, func));
+        listeners.emplace_back(std::make_unique<Listener<_Ty>>(binder_key, func));
     }
 
     //
@@ -126,7 +125,7 @@ public:
             return;
         }
         auto binder_key { reinterpret_cast<std::intptr_t>(binder) };
-        bool success = false;
+        bool success { false };
         for (auto& item : _listener_map) {
             success |= _RemoveListener(item.first, binder_key);
         }
@@ -149,28 +148,27 @@ public:
         const auto size { listeners.size() };
         auto& indexes { _remove_indexes[message_code] };
         for (auto i { 0u }; i < size; ++i) {
-            if (indexes.find(i) != indexes.end()) {
-                continue;
+            if (indexes.find(i) == indexes.end()) {
+                static_cast<Listener<_Ty>*>(listeners[i].get())->call(message);
             }
-            static_cast<Listener<_Ty>*>(listeners[i].get())->call(message);
         }
         --_invoke_level;
         MESSAGE_INVOKE_POP(_invoke_stack);
 
         if (_invoke_level == 0 && _should_remove) {
-            for (auto& [rmCode, rmIndexes] : _remove_indexes) {
-                if (rmIndexes.empty()) {
+            for (auto& [rm_code, rm_indexes] : _remove_indexes) {
+                if (rm_indexes.empty()) {
                     continue;
                 }
-                auto& vec { _listener_map[rmCode] };
-                if (!vec.empty()) {
-                    auto tail { vec.size() };
-                    for (auto index : rmIndexes) {
-                        std::swap(vec[index], vec[--tail]);
+                auto& rm_listeners { _listener_map[rm_code] };
+                if (!rm_listeners.empty()) {
+                    auto tail { rm_listeners.size() };
+                    for (auto index : rm_indexes) {
+                        std::swap(rm_listeners[index], rm_listeners[--tail]);
                     }
-                    vec.resize(tail);
+                    rm_listeners.resize(tail);
                 }
-                rmIndexes.clear();
+                rm_indexes.clear();
             }
             _should_remove = false;
         }
@@ -178,22 +176,22 @@ public:
 
     //
     bool _RemoveListener(std::size_t message_code, std::intptr_t binder_key) {
-        auto& vec { _listener_map[message_code] };
-        if (vec.empty()) {
+        auto& listeners { _listener_map[message_code] };
+        if (listeners.empty()) {
             return false;
         }
         if (_invoke_level == 0) {
-            auto it = std::remove_if(vec.begin(), vec.end(), [&binder_key](auto& item) {
+            auto it { std::remove_if(listeners.begin(), listeners.end(), [&binder_key](auto& item) {
                 return item->binder_key == binder_key;
-            });
-            if (it != vec.end()) {
-                vec.resize(std::distance(vec.begin(), it));
+            }) };
+            if (it != listeners.end()) {
+                listeners.resize(std::distance(listeners.begin(), it));
                 return true;
             }
         } else {
             auto& indexes { _remove_indexes[message_code] };
-            for (auto i { 0u }; i < vec.size(); ++i) {
-                if (vec[i]->binder_key == binder_key) {
+            for (auto i { 0u }; i < listeners.size(); ++i) {
+                if (listeners[i]->binder_key == binder_key) {
                     if (indexes.find(i) == indexes.end()) {
                         indexes.emplace(i);
                         _should_remove = true;
