@@ -129,6 +129,9 @@ void Test5() {
         dispatcher.Send(float(msg + 1));
     });
     dispatcher.AddListener<float>(&dispatcher, [&](auto& msg) {
+        if (msg > 500.f) {
+            return;
+        }
         std::cout << typeid(msg).name() << ": " << msg << " ";
         dispatcher.Send(int(msg + 1));
     });

@@ -22,18 +22,9 @@
     std::cerr << "\n\033[33m" << "[Message] Warn: " << __FUNCTION__ << " / " << __INFO__ << " / " << __DETAIL__ << "\033[0m\n" << std::endl;\
 } while(false)
 
-#define MESSAGE_ERROR(__INFO__, __DETAIL__) do {\
-    std::cerr << "\n\033[35m" << "[Message] Error: " <<  __FUNCTION__ << " / " << __INFO__ << " / " << __DETAIL__ << "\033[0m\n" << std::endl;\
-} while(false)
-
-#define MESSAGE_ASSERT(__INFO__, __DETAIL__) do {\
-    MESSAGE_ERROR(__INFO__, __DETAIL__);\
-    assert(false);\
-} while(false)
-
 #define MESSAGE_INVOKE_PUSH(__STACK__, __CUR__) do {\
     if (__STACK__.size() > 200u) {\
-        MESSAGE_ERROR(__CUR__.name(), "The number of message recursion exceeds the upper limit");\
+        MESSAGE_WARNING(__CUR__.name(), "The recursive number of messages exceeds 200");\
         std::cerr << "\033[35m" << "Invoke stack:" << std::endl;\
         for (auto& item : __STACK__) {\
             std::cerr << "\033[35m" << item.name() << " -> ";\
@@ -50,8 +41,6 @@
 
 #else
 #define MESSAGE_WARNING(__INFO__, __DETAIL__) (void(0))
-#define MESSAGE_ERROR(__INFO__, __DETAIL__) (void(0))
-#define MESSAGE_ASSERT(__INFO__, __DETAIL__) (void(0))
 #define MESSAGE_INVOKE_PUSH(__STACK__, __CUR__) (void(0))
 #define MESSAGE_INVOKE_POP(__STACK__) (void(0))
 #endif
@@ -59,26 +48,6 @@
 namespace Message {
 
 class Dispatcher {
-private:
-    template <typename T>
-    struct Type final {
-        static const std::type_index TYPE;
-        static const std::size_t TYPE_CODE;
-    };
-
-    struct ListenerBase {
-        virtual ~ListenerBase() = default;
-        std::intptr_t binder_key { 0 };
-    };
-
-    template<typename _Ty>
-    struct Listener final: public ListenerBase {
-        Listener(std::intptr_t key, std::function<void(const _Ty&)> func): call(func) {
-            binder_key = key;
-        }
-        std::function<void(const _Ty&)> call;
-    };
-
 public:
     //
     template<typename _Ty>
@@ -174,7 +143,26 @@ public:
         }
     }
 
-    //
+private:
+    template <typename T>
+    struct Type final {
+        static const std::type_index TYPE;
+        static const std::size_t TYPE_CODE;
+    };
+
+    struct ListenerBase {
+        virtual ~ListenerBase() = default;
+        std::intptr_t binder_key { 0 };
+    };
+
+    template<typename _Ty>
+    struct Listener final: public ListenerBase {
+        Listener(std::intptr_t key, std::function<void(const _Ty&)> func): call(func) {
+            binder_key = key;
+        }
+        std::function<void(const _Ty&)> call;
+    };
+
     bool _RemoveListener(std::size_t message_code, std::intptr_t binder_key) {
         auto& listeners { _listener_map[message_code] };
         if (listeners.empty()) {
