@@ -7,7 +7,7 @@
 #include <typeindex>
 #include <functional>
 #include <unordered_map>
-#include <unordered_set>
+#include <set>
 #include <vector>
 #include <memory>
 #include <cstdint>
@@ -193,7 +193,7 @@ private:
 
 private:
     std::unordered_map<std::size_t, std::vector<std::unique_ptr<ListenerBase>>> _listener_map;
-    std::unordered_map<std::size_t, std::unordered_set<std::size_t>> _remove_indexes;
+    std::unordered_map<std::size_t, std::set<std::size_t, std::greater<std::size_t>>> _remove_indexes;
 #ifndef NDEBUG
     std::vector<std::type_index> _invoke_stack;
 #endif

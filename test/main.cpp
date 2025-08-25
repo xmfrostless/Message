@@ -124,6 +124,32 @@ void Test4() {
 void Test5() {
     std::cout << std::endl << "------ " << __FUNCTION__ << " ------" << std::endl;
     Message::Dispatcher dispatcher;
+    std::string a = "a";
+    std::string b = "b";
+    std::string c = "c";
+    std::string d = "d";
+
+    dispatcher.AddListener<int>(&a, [&](auto& msg) {
+        std::cout << a << ":" << msg << std::endl;
+    });
+    dispatcher.AddListener<int>(&b, [&](auto& msg) {
+        std::cout << b << ":" << msg << std::endl;
+    });
+    dispatcher.AddListener<int>(&c, [&](auto& msg) {
+        std::cout << c << ":" << msg << std::endl;
+    });
+    dispatcher.AddListener<int>(&d, [&](auto& msg) {
+        dispatcher.RemoveListener<int>(&b);
+        dispatcher.RemoveListener<int>(&d);
+        std::cout << d << ":" << msg << std::endl;
+    });
+    dispatcher.Send(1);
+    dispatcher.Send(2);
+}
+
+void Test6() {
+    std::cout << std::endl << "------ " << __FUNCTION__ << " ------" << std::endl;
+    Message::Dispatcher dispatcher;
     dispatcher.AddListener<int>(&dispatcher, [&](auto& msg) {
         std::cout << typeid(msg).name() << ": " << msg << " ";
         dispatcher.Send(float(msg + 1));
@@ -145,6 +171,7 @@ int main(int, char**) {
     Test3();
     Test4();
     Test5();
+    Test6();
 
     return 0;
 }
